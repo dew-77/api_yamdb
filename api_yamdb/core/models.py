@@ -5,7 +5,6 @@ from django.db import models
 
 class User(AbstractUser):
     ROLES = (
-        ("anonymous", "Аноним"),
         ("user", "Аутентифицированный пользователь"),
         ("moderator", "Модератор"),
         ("admin", "Администратор"),
@@ -66,12 +65,13 @@ class Title(models.Model):
         null=True,
         blank=True,
     )
-    genre = models.ManyToManyField(Genre, through="GenreTitle")
+    genre = models.ManyToManyField(Genre)
     description = models.TextField("Описание", null=True, blank=True)
 
     class Meta:
         verbose_name = "Произведение"
         verbose_name_plural = "Произведения"
+        ordering = ["-id"]
 
     def __str__(self):
         return self.name
@@ -120,11 +120,6 @@ class Review(models.Model):
 
     def __str__(self):
         return f"Отзыв на {self.author.username} на {self.title}"
-
-
-class GenreTitle(models.Model):
-    genre = models.ForeignKey(Genre, on_delete=models.CASCADE)
-    title = models.ForeignKey(Title, on_delete=models.CASCADE)
 
 
 class Comment(models.Model):
