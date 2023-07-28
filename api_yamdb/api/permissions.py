@@ -1,9 +1,15 @@
-from rest_framework.permissions import BasePermission
+from rest_framework.permissions import SAFE_METHODS, BasePermission
 
 
 class OnlyAdmin(BasePermission):
     """Право доступа только для пользователей c ролью 'admin'."""
+
     def has_permission(self, request, view):
         if request.user.is_authenticated:
-            return (request.user.is_superuser or request.user.role == 'admin')
+            return request.user.is_superuser or request.user.role == "admin"
         return False
+
+
+class ReadOnly(BasePermission):
+    def has_permission(self, request, view):
+        return request.method in SAFE_METHODS

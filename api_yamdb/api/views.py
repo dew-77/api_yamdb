@@ -1,29 +1,38 @@
-from rest_framework.response import Response
-from rest_framework.views import APIView
-from rest_framework.pagination import PageNumberPagination
-from rest_framework.permissions import AllowAny, IsAuthenticated
-from rest_framework import generics, filters, status
-from rest_framework_simplejwt.tokens import AccessToken
+import random
+import string
 
 from django.core.mail import send_mail
 from django.shortcuts import get_object_or_404
 from django.template.loader import render_to_string
+from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework import filters, generics, status, viewsets
+from rest_framework.pagination import PageNumberPagination
+from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.views import APIView
+from rest_framework_simplejwt.tokens import AccessToken
 
-import random
-import string
+from core.models import Category, Genre, Title, User
 
-from core.models import User
-from .permissions import OnlyAdmin
+from .permissions import OnlyAdmin, ReadOnly
 from .serializers import (
-    SignupSerializer, ConfirmSerializer,
-    UsersSerializer, UserSerializer, MePatchSerializer
+    CategorySerializer,
+    ConfirmSerializer,
+    GenreSerializer,
+    MePatchSerializer,
+    SignupSerializer,
+    TitleReadSerializer,
+    TitleWriteSerializer,
+    UserSerializer,
+    UsersSerializer,
 )
+from .viewsets import CreateListDestroyViewSet
 
 
 def generate_confirmation_code(length=6):
     """Генерирует случайный код подтверждения заданной длины."""
     characters = string.digits
-    confirmation_code = ''.join(
+    confirmation_code = "".join(
         random.choice(characters) for _ in range(length)
     )
     return confirmation_code
@@ -31,11 +40,11 @@ def generate_confirmation_code(length=6):
 
 def send_confirmation_email(email, confirmation_code):
     """Отправляет email с кодом подтверждения на указанный адрес."""
-    subject = 'Подтверждение регистрации'
+    subject = "Подтверждение регистрации"
     message = render_to_string(
-        'confirmation_email.html', {'code': confirmation_code}
+        "confirmation_email.html", {"code": confirmation_code}
     )
-    from_email = 'yamdb@yamdb.com'
+    from_email = "yamdb@yamdb.com"
     recipient_list = [email]
     send_mail(subject, message, from_email, recipient_list)
     print(f"Отправлено письмо с кодом {confirmation_code} на адрес {email}.")
@@ -43,13 +52,15 @@ def send_confirmation_email(email, confirmation_code):
 
 class UsersPagination(PageNumberPagination):
     """Пагинатор для generic'a UsersView."""
+
     page_size = 10
-    page_size_query_param = 'page_size'
+    page_size_query_param = "page_size"
     max_page_size = 100
 
 
 class SignupView(generics.CreateAPIView):
     """Generic для самостоятельной регистрации пользователей."""
+
     queryset = User.objects.all()
     serializer_class = SignupSerializer
     permission_classes = [AllowAny]
@@ -61,15 +72,13 @@ class SignupView(generics.CreateAPIView):
         user = serializer.validated_data
         if isinstance(user, User):
             return Response(
-                SignupSerializer(user).data,
-                status=status.HTTP_200_OK
+                SignupSerializer(user).data, status=status.HTTP_200_OK
             )
         else:
             self.perform_create(serializer)
             headers = self.get_success_headers(serializer.data)
             return Response(
-                serializer.data,
-                status=status.HTTP_200_OK, headers=headers
+                serializer.data, status=status.HTTP_200_OK, headers=headers
             )
 
     def perform_create(self, serializer):
@@ -82,6 +91,7 @@ class SignupView(generics.CreateAPIView):
 
 class TokenView(generics.CreateAPIView):
     """Generic для подтверждения и получения токена."""
+
     queryset = User.objects.all()
     serializer_class = ConfirmSerializer
     permission_classes = [AllowAny]
@@ -90,13 +100,13 @@ class TokenView(generics.CreateAPIView):
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        username = serializer.validated_data['username']
+        username = serializer.validated_data["username"]
         user = User.objects.get(username=username)
         user.is_confirmed = True
         user.save()
         access = AccessToken.for_user(user)
         token = {
-            'access': str(access),
+            "access": str(access),
         }
 
         return Response(token, status=status.HTTP_200_OK)
@@ -108,23 +118,24 @@ class UsersView(generics.ListCreateAPIView):
     1) Просмотра пользователей
     2) Создания пользователя администратором.
     """
+
     queryset = User.objects.all()
     serializer_class = UsersSerializer
     filter_backends = (filters.SearchFilter,)
-    search_fields = ('username',)
+    search_fields = ("username",)
     permission_classes = [OnlyAdmin]
     pagination_class = UsersPagination
 
 
 class MeView(APIView):
     """Generic для просмотра и редактирования своего профиля."""
+
     serializer_class = MePatchSerializer
     permission_classes = [IsAuthenticated]
 
     def patch(self, request):
         serializer = MePatchSerializer(
-            request.user,
-            data=request.data, partial=True
+            request.user, data=request.data, partial=True
         )
         if serializer.is_valid():
             serializer.save()
@@ -138,14 +149,14 @@ class MeView(APIView):
 
 class UserView(APIView):
     """Generic для просмотра и редактирования конкретного пользователя."""
+
     serializer_class = UserSerializer
     permission_classes = [OnlyAdmin]
 
     def patch(self, request, username):
         user = get_object_or_404(User, username=username)
         serializer = self.serializer_class(
-            user,
-            data=request.data, partial=True
+            user, data=request.data, partial=True
         )
         if serializer.is_valid():
             serializer.save()
@@ -161,3 +172,41 @@ class UserView(APIView):
         user = get_object_or_404(User, username=username)
         user.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class CategoryViewSet(CreateListDestroyViewSet):
+    queryset = Category.objects.all()
+    serializer_class = CategorySerializer
+    permission_classes = [OnlyAdmin | ReadOnly]
+    pagination_class = PageNumberPagination
+    filter_backends = (filters.SearchFilter,)
+    search_fields = ("name",)
+    lookup_field = "slug"
+
+
+class GenreViewSet(CreateListDestroyViewSet):
+    queryset = Genre.objects.all()
+    serializer_class = GenreSerializer
+    permission_classes = [OnlyAdmin | ReadOnly]
+    pagination_class = PageNumberPagination
+    filter_backends = (filters.SearchFilter,)
+    search_fields = ("name",)
+    lookup_field = "slug"
+
+
+class TitleViewSet(viewsets.ModelViewSet):
+    queryset = Title.objects.all()
+    permission_classes = [OnlyAdmin | ReadOnly]
+    pagination_class = PageNumberPagination
+    filter_backends = (DjangoFilterBackend,)
+    filterset_fields = (
+        "category",
+        "genre",
+        "name",
+        "year",
+    )
+
+    def get_serializer_class(self):
+        if self.request.method == "GET":
+            return TitleReadSerializer
+        return TitleWriteSerializer
