@@ -194,14 +194,30 @@ class GenreViewSet(CreateListDestroyViewSet):
     lookup_field = "slug"
 
 
+class GenreFilter(filters.BaseFilterBackend):
+    def filter_queryset(self, request, queryset, view):
+        genre_slug = request.query_params.get('genre')
+        if genre_slug:
+            genre = get_object_or_404(Genre, slug=genre_slug)
+            queryset = queryset.filter(genre=genre)
+        return queryset
+
+
+class CategoryFilter(filters.BaseFilterBackend):
+    def filter_queryset(self, request, queryset, view):
+        category_slug = request.query_params.get('category')
+        if category_slug:
+            category = get_object_or_404(Category, slug=category_slug)
+            queryset = queryset.filter(category=category)
+        return queryset
+
+
 class TitleViewSet(viewsets.ModelViewSet):
     queryset = Title.objects.all()
     permission_classes = [OnlyAdmin | ReadOnly]
     pagination_class = PageNumberPagination
-    filter_backends = (DjangoFilterBackend,)
+    filter_backends = (DjangoFilterBackend, GenreFilter, CategoryFilter)
     filterset_fields = (
-        "category",
-        "genre",
         "name",
         "year",
     )
