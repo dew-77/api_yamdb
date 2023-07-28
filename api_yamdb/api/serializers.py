@@ -198,9 +198,13 @@ class TitleReadSerializer(serializers.ModelSerializer):
 
 
 class TitleWriteSerializer(serializers.ModelSerializer):
-    category = serializers.SlugRelatedField(slug_field="name", read_only=True)
+    category = serializers.SlugRelatedField(
+        slug_field="slug",
+        queryset=Category.objects.all())
     genre = serializers.SlugRelatedField(
-        slug_field="name", read_only=True, many=True
+        slug_field="slug",
+        queryset=Genre.objects.all(),
+        many=True
     )
 
     class Meta:
@@ -208,8 +212,9 @@ class TitleWriteSerializer(serializers.ModelSerializer):
         fields = ("id", "name", "year", "category", "genre", "description")
 
     def validate(self, data):
-        if int(data["year"]) > datetime.today().year:
-            raise serializers.ValidationError(
-                "Год выпуска не может быть больше текущего"
-            )
+        if "year" in data:
+            if int(data["year"]) > datetime.today().year:
+                raise serializers.ValidationError(
+                    "Год выпуска не может быть больше текущего"
+                )
         return data
