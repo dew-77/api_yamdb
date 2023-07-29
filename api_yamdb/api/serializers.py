@@ -2,9 +2,11 @@ import re
 from datetime import datetime
 
 from django.shortcuts import get_object_or_404
+from django.db.models import Avg
 from rest_framework import serializers
 
-from core.models import Category, Genre, Title, User
+from reviews.models import Category, Genre, Review, Title
+from core.models import User
 
 
 class SignupSerializer(serializers.ModelSerializer):
@@ -191,10 +193,23 @@ class GenreSerializer(serializers.ModelSerializer):
 class TitleReadSerializer(serializers.ModelSerializer):
     category = CategorySerializer(read_only=True)
     genre = GenreSerializer(read_only=True, many=True)
+    rating = serializers.SerializerMethodField()
 
     class Meta:
         model = Title
-        fields = ("id", "name", "year", "category", "genre", "description")
+        fields = (
+            "id", "name", "year",
+            "category", "genre", "description",
+            "rating"
+        )
+
+    def get_rating(self, obj):
+        if obj.reviews.count() == 0:
+            return None
+        review = Review.objects.filter(
+            title=obj
+        ).aggregate(rating=Avg('score'))
+        return review['rating']
 
 
 class TitleWriteSerializer(serializers.ModelSerializer):

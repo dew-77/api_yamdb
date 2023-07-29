@@ -29,6 +29,7 @@ SIMPLE_JWT = {
 INSTALLED_APPS = [
     "api.apps.ApiConfig",
     "core.apps.CoreConfig",
+    "reviews.apps.ReviewsConfig",
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
