@@ -16,7 +16,7 @@ from rest_framework_simplejwt.tokens import AccessToken
 
 from reviews.models import Category, Genre, Title, User
 
-from .permissions import OnlyAdmin, ReadOnly
+from .permissions import IsAdmin, ReadOnly
 from .serializers import (
     CategorySerializer,
     ConfirmSerializer,
@@ -125,7 +125,7 @@ class UsersView(generics.ListCreateAPIView):
     serializer_class = UsersSerializer
     filter_backends = (filters.SearchFilter,)
     search_fields = ("username",)
-    permission_classes = [OnlyAdmin]
+    permission_classes = [IsAdmin]
     pagination_class = UsersPagination
 
 
@@ -153,7 +153,7 @@ class UserView(APIView):
     """Generic для просмотра и редактирования конкретного пользователя."""
 
     serializer_class = UserSerializer
-    permission_classes = [OnlyAdmin]
+    permission_classes = [IsAdmin]
 
     def patch(self, request, username):
         user = get_object_or_404(User, username=username)
@@ -179,7 +179,7 @@ class UserView(APIView):
 class CategoryViewSet(CreateListDestroyViewSet):
     queryset = Category.objects.all()
     serializer_class = CategorySerializer
-    permission_classes = [OnlyAdmin | ReadOnly]
+    permission_classes = [IsAdmin | ReadOnly]
     pagination_class = PageNumberPagination
     filter_backends = (filters.SearchFilter,)
     search_fields = ("name",)
@@ -189,7 +189,7 @@ class CategoryViewSet(CreateListDestroyViewSet):
 class GenreViewSet(CreateListDestroyViewSet):
     queryset = Genre.objects.all()
     serializer_class = GenreSerializer
-    permission_classes = [OnlyAdmin | ReadOnly]
+    permission_classes = [IsAdmin | ReadOnly]
     pagination_class = PageNumberPagination
     filter_backends = (filters.SearchFilter,)
     search_fields = ("name",)
@@ -216,7 +216,7 @@ class CategoryFilter(filters.BaseFilterBackend):
 
 class TitleViewSet(viewsets.ModelViewSet):
     queryset = Title.objects.all()
-    permission_classes = [OnlyAdmin | ReadOnly]
+    permission_classes = [IsAdmin | ReadOnly]
     pagination_class = PageNumberPagination
     filter_backends = (DjangoFilterBackend, GenreFilter, CategoryFilter)
     filterset_fields = (
