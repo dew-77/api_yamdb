@@ -2,12 +2,13 @@ from rest_framework.permissions import SAFE_METHODS, BasePermission
 
 
 class ReadOnly(BasePermission):
+    """Право доступа для анонимных пользователей."""
     def has_permission(self, request, view):
         return request.method in SAFE_METHODS
 
 
 class IsAdmin(BasePermission):
-    """Право доступа только для пользователей c ролью 'admin'."""
+    """Право доступа только для администраторов и выше."""
 
     def has_permission(self, request, view):
         if request.user.is_authenticated:
@@ -16,6 +17,7 @@ class IsAdmin(BasePermission):
 
 
 class IsAuthorOrReadOnly(BasePermission):
+    """Право доступа для авторов объектов."""
     def has_permission(self, request, view):
         return (request.method in SAFE_METHODS
                 or request.user.is_authenticated)
@@ -31,6 +33,7 @@ class IsAuthorOrReadOnly(BasePermission):
 
 
 class IsModeratorOrAdminOrReadOnly(BasePermission):
+    """Право доступа для модераторов и выше."""
     def has_permission(self, request, view):
         return (request.method in SAFE_METHODS
                 or request.user.is_authenticated)

@@ -3,8 +3,10 @@ from rest_framework import routers
 
 from .views import (
     CategoryViewSet,
+    CommentViewSet,
     GenreViewSet,
     MeView,
+    ReviewViewSet,
     SignupView,
     TitleViewSet,
     TokenView,
@@ -12,7 +14,6 @@ from .views import (
     UserView,
 )
 
-from reviews.views import ReviewViewSet, CommentViewSet
 
 router = routers.DefaultRouter()
 router.register(r"categories", CategoryViewSet)

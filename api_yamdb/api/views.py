@@ -14,14 +14,21 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import AccessToken
 
-from reviews.models import Category, Genre, Title, User
+from reviews.models import Category, Genre, Review, Title, User
 
-from .permissions import IsAdmin, ReadOnly
+from .permissions import (
+    IsAdmin,
+    ReadOnly,
+    IsAuthorOrReadOnly,
+    IsModeratorOrAdminOrReadOnly
+)
 from .serializers import (
     CategorySerializer,
     ConfirmSerializer,
+    CommentSerializer,
     GenreSerializer,
     MePatchSerializer,
+    ReviewSerializer,
     SignupSerializer,
     TitleReadSerializer,
     TitleWriteSerializer,
@@ -53,7 +60,7 @@ def send_confirmation_email(email, confirmation_code):
 
 
 class UsersPagination(PageNumberPagination):
-    """Пагинатор для generic'a UsersView."""
+    """Пагинатор для UsersView."""
 
     page_size = 10
     page_size_query_param = "page_size"
@@ -177,6 +184,8 @@ class UserView(APIView):
 
 
 class CategoryViewSet(CreateListDestroyViewSet):
+    """ViewSet для категорий."""
+
     queryset = Category.objects.all()
     serializer_class = CategorySerializer
     permission_classes = [IsAdmin | ReadOnly]
@@ -187,6 +196,7 @@ class CategoryViewSet(CreateListDestroyViewSet):
 
 
 class GenreViewSet(CreateListDestroyViewSet):
+    """ViewSet для жанров."""
     queryset = Genre.objects.all()
     serializer_class = GenreSerializer
     permission_classes = [IsAdmin | ReadOnly]
@@ -197,8 +207,10 @@ class GenreViewSet(CreateListDestroyViewSet):
 
 
 class GenreFilter(filters.BaseFilterBackend):
+    """Фильтр для поиска по slug жанра."""
+
     def filter_queryset(self, request, queryset, view):
-        genre_slug = request.query_params.get('genre')
+        genre_slug = request.query_params.get("genre")
         if genre_slug:
             genre = get_object_or_404(Genre, slug=genre_slug)
             queryset = queryset.filter(genre=genre)
@@ -206,8 +218,10 @@ class GenreFilter(filters.BaseFilterBackend):
 
 
 class CategoryFilter(filters.BaseFilterBackend):
+    """Фильтр для поиска по slug категории."""
+
     def filter_queryset(self, request, queryset, view):
-        category_slug = request.query_params.get('category')
+        category_slug = request.query_params.get("category")
         if category_slug:
             category = get_object_or_404(Category, slug=category_slug)
             queryset = queryset.filter(category=category)
@@ -215,6 +229,8 @@ class CategoryFilter(filters.BaseFilterBackend):
 
 
 class TitleViewSet(viewsets.ModelViewSet):
+    """ViewSet для произведений."""
+
     queryset = Title.objects.all()
     permission_classes = [IsAdmin | ReadOnly]
     pagination_class = PageNumberPagination
@@ -228,3 +244,43 @@ class TitleViewSet(viewsets.ModelViewSet):
         if self.request.method == "GET":
             return TitleReadSerializer
         return TitleWriteSerializer
+
+
+class ReviewViewSet(viewsets.ModelViewSet):
+    """ViewSet для оценок."""
+
+    serializer_class = ReviewSerializer
+    permission_classes = [IsAuthorOrReadOnly | IsModeratorOrAdminOrReadOnly]
+
+    def get_queryset(self):
+        return Review.objects.filter(title_id=self.kwargs["title_id"])
+
+    def perform_create(self, serializer):
+        title = get_object_or_404(Title, pk=self.kwargs.get("title_id"))
+        serializer.save(
+            author=self.request.user, title=title
+        )
+
+
+class CommentViewSet(viewsets.ModelViewSet):
+    """ViewSet для комментариев."""
+
+    serializer_class = CommentSerializer
+    permission_classes = [IsAuthorOrReadOnly | IsModeratorOrAdminOrReadOnly]
+
+    def get_queryset(self):
+        review = get_object_or_404(
+            Review, pk=self.kwargs.get("review_id"),
+            title_id=self.kwargs.get("title_id")
+        )
+        return review.comments.all()
+
+    def perform_create(self, serializer):
+        review = get_object_or_404(
+            Review,
+            pk=self.kwargs.get("review_id"),
+            title=self.kwargs.get("title_id")
+        )
+        serializer.save(
+            author=self.request.user, review=review
+        )

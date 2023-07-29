@@ -41,6 +41,7 @@ INSTALLED_APPS = [
     "django_filters",
 ]
 
+# DRF settings
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
