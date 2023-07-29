@@ -7,12 +7,14 @@ from django.template.loader import render_to_string
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters, generics, status, viewsets
 from rest_framework.pagination import PageNumberPagination
-from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.permissions import (
+    AllowAny, IsAuthenticated
+)
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import AccessToken
 
-from core.models import Category, Genre, Title, User
+from reviews.models import Category, Genre, Title, User
 
 from .permissions import OnlyAdmin, ReadOnly
 from .serializers import (
