@@ -195,6 +195,12 @@ class TitleReadSerializer(serializers.ModelSerializer):
     class Meta:
         model = Title
         fields = ("id", "name", "year", "category", "genre", "description")
+    
+    def get_rating(self, obj):
+        if obj.reviews.count() == 0:
+            return None
+        rev = Review.objects.filter(title=obj).count()
+        return rev['rating']
 
 
 class TitleWriteSerializer(serializers.ModelSerializer):
