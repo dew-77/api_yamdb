@@ -1,10 +1,9 @@
-import re
 from datetime import datetime
 
 from django.shortcuts import get_object_or_404
-from django.db.models import Avg
 from rest_framework import serializers
 
+from .validators import validate_pattern
 from reviews.models import Category, Comment, Genre, Review, Title
 from core.models import User
 
@@ -38,11 +37,9 @@ class SignupSerializer(serializers.ModelSerializer):
                 "Пользователь c указанным юзернеймом уже существует"
             )
 
-        pattern = r"^[\w.@+-]+$"
-        if not re.match(pattern, username):
-            raise serializers.ValidationError("Некорректный формат username")
+        validate_pattern(username)
 
-        return data
+        return super().validate(data)
 
     class Meta:
         model = User
@@ -62,15 +59,13 @@ class ConfirmSerializer(serializers.ModelSerializer):
         confirmation_code = data.get("confirmation_code")
         username = data.get("username")
 
-        pattern = r"^[\w.@+-]+$"
-        if not re.match(pattern, username):
-            raise serializers.ValidationError("Некорректный формат username")
+        validate_pattern(username)
 
         user = get_object_or_404(User, username=username)
 
         if user.confirmation_code != confirmation_code:
             raise serializers.ValidationError("Неверный код подтверждения")
-        return data
+        return super().validate(data)
 
     class Meta:
         model = User
@@ -83,18 +78,31 @@ class ConfirmSerializer(serializers.ModelSerializer):
 class UsersSerializer(serializers.ModelSerializer):
     """Сериализатор для просмотра и добавления пользователей."""
 
-    username = serializers.CharField(max_length=150)
-    email = serializers.EmailField(max_length=254)
+    username = serializers.CharField(max_length=150, required=False)
+    email = serializers.EmailField(max_length=254, required=False)
     first_name = serializers.CharField(max_length=150, required=False)
     last_name = serializers.CharField(max_length=150, required=False)
     bio = serializers.CharField(required=False)
     role = serializers.ChoiceField(
-        choices=["user", "moderator", "admin"], default="user"
+        choices=User.ROLES, default="user"
     )
 
     def validate(self, data):
         username = data.get("username")
         email = data.get("email")
+
+        if self.context["request"].method == "POST":
+            if not username:
+                raise serializers.ValidationError(
+                    "Поле username обязательно"
+                )
+            if not email:
+                raise serializers.ValidationError(
+                    "Поле email обязательно"
+                )
+
+        if username:
+            validate_pattern(username)
 
         if username == "me":
             raise serializers.ValidationError(
@@ -111,11 +119,7 @@ class UsersSerializer(serializers.ModelSerializer):
                 "Пользователь c указанным юзернеймом уже существует"
             )
 
-        pattern = r"^[\w.@+-]+$"
-        if not re.match(pattern, username):
-            raise serializers.ValidationError("Некорректный формат username")
-
-        return data
+        return super().validate(data)
 
     class Meta:
         model = User
@@ -141,41 +145,12 @@ class MePatchSerializer(serializers.ModelSerializer):
     def validate(self, data):
         username = data.get("username")
         if username:
-            pattern = r"^[\w.@+-]+$"
-            if not re.match(pattern, username):
-                raise serializers.ValidationError(
-                    "Некорректный формат username"
-                )
-
+            validate_pattern(username)
         return data
 
     class Meta:
         model = User
         fields = ["username", "email", "first_name", "last_name", "bio"]
-
-
-class UserSerializer(serializers.ModelSerializer):
-    """Сериализатор для просмотра, изменения, удаления пользователя."""
-
-    username = serializers.CharField(max_length=150)
-    email = serializers.EmailField(max_length=254)
-    first_name = serializers.CharField(max_length=150, required=False)
-    last_name = serializers.CharField(max_length=150, required=False)
-    bio = serializers.CharField(required=False)
-    role = serializers.ChoiceField(
-        choices=["user", "moderator", "admin"], default="user"
-    )
-
-    class Meta:
-        model = User
-        fields = [
-            "username",
-            "email",
-            "first_name",
-            "last_name",
-            "bio",
-            "role",
-        ]
 
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -199,7 +174,7 @@ class TitleReadSerializer(serializers.ModelSerializer):
 
     category = CategorySerializer(read_only=True)
     genre = GenreSerializer(read_only=True, many=True)
-    rating = serializers.SerializerMethodField()
+    rating = serializers.FloatField(read_only=True)
 
     class Meta:
         model = Title
@@ -208,14 +183,6 @@ class TitleReadSerializer(serializers.ModelSerializer):
             "category", "genre", "description",
             "rating"
         )
-
-    def get_rating(self, obj):
-        if obj.reviews.count() == 0:
-            return None
-        review = Review.objects.filter(
-            title=obj
-        ).aggregate(rating=Avg("score"))
-        return review["rating"]
 
 
 class TitleWriteSerializer(serializers.ModelSerializer):
@@ -253,11 +220,12 @@ class ReviewSerializer(serializers.ModelSerializer):
     def validate(self, data):
         author = self.context["request"].user
         title_id = self.context["view"].kwargs.get("title_id")
-        if Review.objects.filter(
-            author=author, title_id=title_id
-        ).exists() and self.context["request"].method == "POST":
-            raise serializers.ValidationError(
-                "Ha одно произведение можно оставить только 1 отзыв!")
+        if self.context["request"].method == "POST":
+            if Review.objects.filter(
+                author=author, title_id=title_id
+            ).exists():
+                raise serializers.ValidationError(
+                    "Ha одно произведение можно оставить только 1 отзыв!")
         return data
 
     class Meta:

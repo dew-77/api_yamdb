@@ -1,17 +1,13 @@
-import random
-import string
-
-from django.core.mail import send_mail
+from django.db.models import Avg
 from django.shortcuts import get_object_or_404
-from django.template.loader import render_to_string
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters, generics, status, viewsets
+from rest_framework.decorators import action
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import (
     AllowAny, IsAuthenticated
 )
 from rest_framework.response import Response
-from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import AccessToken
 
 from reviews.models import Category, Genre, Review, Title, User
@@ -32,39 +28,11 @@ from .serializers import (
     SignupSerializer,
     TitleReadSerializer,
     TitleWriteSerializer,
-    UserSerializer,
     UsersSerializer,
 )
 from .viewsets import CreateListDestroyViewSet
-
-
-def generate_confirmation_code(length=6):
-    """Генерирует случайный код подтверждения заданной длины."""
-    characters = string.digits
-    confirmation_code = "".join(
-        random.choice(characters) for _ in range(length)
-    )
-    return confirmation_code
-
-
-def send_confirmation_email(email, confirmation_code):
-    """Отправляет email с кодом подтверждения на указанный адрес."""
-    subject = "Подтверждение регистрации"
-    message = render_to_string(
-        "confirmation_email.html", {"code": confirmation_code}
-    )
-    from_email = "yamdb@yamdb.com"
-    recipient_list = [email]
-    send_mail(subject, message, from_email, recipient_list)
-    print(f"Отправлено письмо с кодом {confirmation_code} на адрес {email}.")
-
-
-class UsersPagination(PageNumberPagination):
-    """Пагинатор для UsersView."""
-
-    page_size = 10
-    page_size_query_param = "page_size"
-    max_page_size = 100
+from .paginators import UsersPagination
+from core.services import send_confirmation_email, generate_confirmation_code
 
 
 class SignupView(generics.CreateAPIView):
@@ -121,11 +89,9 @@ class TokenView(generics.CreateAPIView):
         return Response(token, status=status.HTTP_200_OK)
 
 
-class UsersView(generics.ListCreateAPIView):
+class UserViewSet(viewsets.ModelViewSet):
     """
-    Generic для:
-    1) Просмотра пользователей
-    2) Создания пользователя администратором.
+    ViewSet для взаимодействия с моделью пользователя.
     """
 
     queryset = User.objects.all()
@@ -134,53 +100,34 @@ class UsersView(generics.ListCreateAPIView):
     search_fields = ("username",)
     permission_classes = [IsAdmin]
     pagination_class = UsersPagination
+    lookup_field = "username"
 
-
-class MeView(APIView):
-    """Generic для просмотра и редактирования своего профиля."""
-
-    serializer_class = MePatchSerializer
-    permission_classes = [IsAuthenticated]
-
-    def patch(self, request):
-        serializer = MePatchSerializer(
-            request.user, data=request.data, partial=True
-        )
-        if serializer.is_valid():
-            serializer.save()
+    @action(detail=False, methods=["get", "patch"])
+    def me(self, request):
+        """
+        Обработчик GET и PATCH запросов к users/me/
+        """
+        if request.method == "GET":
+            serializer = UsersSerializer(request.user)
             return Response(serializer.data, status=status.HTTP_200_OK)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        elif request.method == "PATCH":
+            serializer = MePatchSerializer(
+                request.user, data=request.data, partial=True
+            )
+            if serializer.is_valid():
+                serializer.save()
+                return Response(serializer.data, status=status.HTTP_200_OK)
+            return Response(
+                serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-    def get(self, request):
-        serializer = UserSerializer(request.user)
-        return Response(serializer.data, status=status.HTTP_200_OK)
-
-
-class UserView(APIView):
-    """Generic для просмотра и редактирования конкретного пользователя."""
-
-    serializer_class = UserSerializer
-    permission_classes = [IsAdmin]
-
-    def patch(self, request, username):
-        user = get_object_or_404(User, username=username)
-        serializer = self.serializer_class(
-            user, data=request.data, partial=True
-        )
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data, status=status.HTTP_200_OK)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-    def get(self, request, username):
-        user = get_object_or_404(User, username=username)
-        serializer = self.serializer_class(user)
-        return Response(serializer.data, status=status.HTTP_200_OK)
-
-    def delete(self, request, username):
-        user = get_object_or_404(User, username=username)
-        user.delete()
-        return Response(status=status.HTTP_204_NO_CONTENT)
+    def get_permissions(self):
+        if self.action in [
+            "update", "list", "retrieve", "create", "destroy"
+        ]:
+            permission_classes = [IsAdmin]
+        else:
+            permission_classes = [IsAuthenticated]
+        return [permission() for permission in permission_classes]
 
 
 class CategoryViewSet(CreateListDestroyViewSet):
@@ -244,6 +191,13 @@ class TitleViewSet(viewsets.ModelViewSet):
         if self.request.method == "GET":
             return TitleReadSerializer
         return TitleWriteSerializer
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        if self.request.method == "GET":
+            queryset = queryset.annotate(
+                rating=Avg("reviews__score")).order_by("-id")
+        return queryset
 
 
 class ReviewViewSet(viewsets.ModelViewSet):
